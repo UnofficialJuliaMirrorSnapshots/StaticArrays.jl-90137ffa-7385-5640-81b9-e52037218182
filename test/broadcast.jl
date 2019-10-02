@@ -109,9 +109,6 @@ end
         @test @inferred(v2 .- v1) === SVector(0, 2)
         @test @inferred(v1 .^ v2) === SVector(1, 16)
         @test @inferred(v2 .^ v1) === SVector(1, 16)
-        # Issue #199: broadcast with empty SArray
-        @test @inferred(SVector(1) .+ SVector{0,Int}()) === SVector{0,Union{}}()
-        @test @inferred(SVector{0,Int}() .+ SVector(1)) === SVector{0,Union{}}()
         # Issue #200: broadcast with Adjoint
         @test @inferred(v1 .+ v2') === @SMatrix [2 5; 3 6]
         @test @inferred(v1 .+ transpose(v2)) === @SMatrix [2 5; 3 6]
@@ -142,6 +139,13 @@ end
         @test @inferred(zeros(SVector{0}) .+ zeros(SMatrix{0,2})) === zeros(SMatrix{0,2})
         m = zeros(MMatrix{0,2})
         @test @inferred(broadcast!(+, m, m, zeros(SVector{0}))) == zeros(SMatrix{0,2})
+        # Issue #199: broadcast with empty SArray
+        @test @inferred(SVector(1) .+ SVector{0,Int}()) === SVector{0,Int}()
+        @test @inferred(SVector{0,Int}() .+ SVector(1.0)) === SVector{0,Float64}()
+        # Issue #528
+        @test @inferred(isapprox(SMatrix{3,0,Float64}(), SMatrix{3,0,Float64}()))
+        @test @inferred(broadcast(length, SVector{0,String}())) === SVector{0,Int}()
+        @test @inferred(broadcast(join, SVector{0,String}(), SVector{0,String}(), SVector{0,String}())) === SVector{0,String}()
     end
 
     @testset "Mutating broadcast!" begin
@@ -212,5 +216,22 @@ end
         X = rand(SVector{3,SVector{2,Float64}})
         foo493(X) = normalize.(X)
         @test foo493(X) isa Core.Compiler.return_type(foo493, Tuple{typeof(X)})
+    end
+
+    @testset "broadcasting with tuples" begin
+        # issue 485
+        @test @inferred(SA[1,2,3] .+ (1,))               === SA{Int}[2, 3, 4]
+        @test @inferred(SA[1,2,3] .+ (10, 20, 30))       === SA{Int}[11, 22, 33]
+        @test @inferred((1,2)     .+ (SA[10 20; 30 40])) === SA{Int}[11 21; 32 42]
+        @test @inferred((SA[10 20; 30 40]) .+ (1,2))     === SA{Int}[11 21; 32 42]
+
+        add_bc!(m, v) = m .+= v  # Helper function; @inferred gets confused by .+= syntax
+        @test @inferred(add_bc!(MVector((1,2,3)), (10, 20, 30)))   ::MVector{3,Int}   == SA[11, 22, 33]
+        @test @inferred(add_bc!(MMatrix(SA[10 20; 30 40]), (1,2))) ::MMatrix{2,2,Int} == SA[11 21; 32 42]
+
+        # Tuples of SA
+        @test SA[1,2,3] .* (SA[1,0],) === SVector{3,SVector{2,Int}}(((1,0), (2,0), (3,0)))
+        # Unfortunately this case of nested broadcasting is not inferred
+        @test_broken @inferred(SA[1,2,3] .* (SA[1,0],))
     end
 end

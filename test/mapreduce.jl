@@ -24,6 +24,11 @@ using Statistics: mean
         v3 = @SVector [1, 2, 3, 4]
         map!(+, mv3, v1, v2, v3)
         @test mv3 == @MVector [7, 9, 11, 13]
+
+        # Output eltype for empty cases #528
+        @test @inferred(map(/, SVector{0,Int}(), SVector{0,Int}())) === SVector{0,Float64}()
+        @test @inferred(map(+, SVector{0,Int}(), SVector{0,Float32}())) === SVector{0,Float32}()
+        @test @inferred(map(length, SVector{0,String}())) === SVector{0,Int}()
     end
 
     @testset "[map]reduce and [map]reducedim" begin
@@ -156,5 +161,14 @@ using Statistics: mean
         @test @inferred(v + v) == SVector(SVector(6, 4), SVector(10, 14))
         v = SVector(SVector(3, 2, 1), SVector(5, 7, 9))
         @test @inferred(v + v) == SVector(SVector(6, 4, 2), SVector(10, 14, 18))
+    end
+    @testset "hcat and vcat" begin
+        # issue #641
+        v = SVector([1,2], [3,4])
+        @test reduce(vcat, v) == [1,2,3,4]
+        @test reduce(hcat, v) == [1 3; 2 4]
+        v2 = SVector(SVector(1,2), SVector(3,4))
+        @test @inferred(reduce(vcat, v2)) === @SVector [1,2,3,4]
+        @test @inferred(reduce(hcat, v2)) === @SMatrix [1 3; 2 4]
     end
 end
